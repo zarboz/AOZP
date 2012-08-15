@@ -338,6 +338,9 @@ static int __init modem_8960_init(void)
 		goto out;
 	}
 
+	if(board_mfg_mode() != 0)
+		enable_modem_ssr = 0;
+
        if (get_kernel_flag() & KERNEL_FLAG_ENABLE_SSR_MODEM)
 		enable_modem_ssr = 1;
 

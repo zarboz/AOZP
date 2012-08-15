@@ -804,12 +804,9 @@ static int __init subsys_restart_init(void)
 	ssr_have_set_restart_reason = 0;
 
 #if defined(CONFIG_MSM_SSR_INDEPENDENT)
-	if (board_mfg_mode() == 0)
-		restart_level = RESET_SUBSYS_INDEPENDENT;
-	else
-		restart_level = RESET_SOC;
+	restart_level = RESET_SUBSYS_INDEPENDENT;
 #else
-		restart_level = RESET_SOC;
+	restart_level = RESET_SOC;
 #endif
 
 	if (get_kernel_flag() & (KERNEL_FLAG_ENABLE_SSR_MODEM | KERNEL_FLAG_ENABLE_SSR_WCNSS))

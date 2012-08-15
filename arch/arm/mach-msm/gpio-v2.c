@@ -30,6 +30,11 @@
 #include <mach/gpiomux.h>
 #include "mpm.h"
 #include <mach/pm.h>
+
+#if defined(CONFIG_ARCH_MSM8960)
+#define GPIO_PM_USR_INTz       (104)
+#endif
+
 /* Bits of interest in the GPIO_IN_OUT register.
  */
 enum {
@@ -548,8 +553,14 @@ void msm_gpio_show_resume_irq(void)
 					BIT(INTR_STATUS_BIT);
 		if (intstat) {
 			irq = msm_gpio_to_irq(&msm_gpio.gpio_chip, i);
-			pr_warning("%s: %d triggered\n",
-				__func__, irq);
+			pr_warning("%s: %d triggered\n", __func__, irq);
+#if defined(CONFIG_ARCH_MSM8960)
+			if(irq != GPIO_PM_USR_INTz + NR_MSM_IRQS) {
+#endif
+				pr_warning("[WAKEUP] Resume caused by msmgpio-%d\n", irq - NR_MSM_IRQS);
+#if defined(CONFIG_ARCH_MSM8960)
+			}
+#endif
 		}
 	}
 	spin_unlock_irqrestore(&tlmm_lock, irq_flags);

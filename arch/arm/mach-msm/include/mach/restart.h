@@ -17,6 +17,12 @@
 #define RESTART_NORMAL 0x0
 #define RESTART_DLOAD  0x1
 
+
+enum RAMDUMP_STATUS {
+	RAMDUMP_BUG = 1,
+	RAMDUMP_UNKNOWN_INST
+};
+
 #ifdef CONFIG_MSM_NATIVE_RESTART
 /* if arch_reset is called from userspace,
    restart mode will be set to 'h' equal to 104.

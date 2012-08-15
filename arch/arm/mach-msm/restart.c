@@ -103,6 +103,8 @@ int check_in_panic(void)
 	return in_panic;
 }
 
+int ramdump_source=0;
+
 static int panic_prep_restart(struct notifier_block *this,
 			      unsigned long event, void *ptr)
 {

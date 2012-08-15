@@ -3257,7 +3257,7 @@ static struct clk_freq_tbl clk_tbl_gfx2d[] = {
 	F_GFX2D(160000000, pll2, 1,  5),
 	F_GFX2D(177778000, pll2, 2,  9),
 	F_GFX2D(200000000, pll2, 1,  4),
-	F_GFX2D(228571000, pll2, 2,  7),
+	F_GFX2D(300000000, pll2, 2,  7),
 	F_END
 };
 
@@ -3300,7 +3300,7 @@ static struct rcg_clk gfx2d0_clk = {
 		.dbg_name = "gfx2d0_clk",
 		.ops = &clk_ops_rcg_8960,
 		VDD_DIG_FMAX_MAP3(LOW,  100000000, NOMINAL, 200000000,
-				  HIGH, 228571000),
+				  HIGH, 300000000),
 		CLK_INIT(gfx2d0_clk.c),
 	},
 };
@@ -3344,7 +3344,7 @@ static struct rcg_clk gfx2d1_clk = {
 		.dbg_name = "gfx2d1_clk",
 		.ops = &clk_ops_rcg_8960,
 		VDD_DIG_FMAX_MAP3(LOW,  100000000, NOMINAL, 200000000,
-				  HIGH, 228571000),
+				  HIGH, 300000000),
 		CLK_INIT(gfx2d1_clk.c),
 	},
 };
@@ -3394,15 +3394,14 @@ static struct clk_freq_tbl clk_tbl_gfx3d_8960_v2[] = {
 	F_GFX3D(228571000, pll2, 2,  7),
 	F_GFX3D(266667000, pll2, 1,  3),
 	F_GFX3D(300000000, pll3, 1,  4),
-	F_GFX3D(320000000, pll2, 2,  5),
-	F_GFX3D(400000000, pll2, 1,  2),
+	F_GFX3D(500000000, pll2, 2,  5),
 	F_END
 };
 
 static unsigned long fmax_gfx3d_8960_v2[MAX_VDD_LEVELS] __initdata = {
 	[VDD_DIG_LOW]     = 128000000,
 	[VDD_DIG_NOMINAL] = 300000000,
-	[VDD_DIG_HIGH]    = 400000000
+	[VDD_DIG_HIGH]    = 500000000
 };
 
 static struct clk_freq_tbl clk_tbl_gfx3d_8064[] = {
@@ -3469,8 +3468,8 @@ static struct rcg_clk gfx3d_clk = {
 	.c = {
 		.dbg_name = "gfx3d_clk",
 		.ops = &clk_ops_rcg_8960,
-		VDD_DIG_FMAX_MAP3(LOW,  128000000, NOMINAL, 266667000,
-				  HIGH, 320000000),
+		VDD_DIG_FMAX_MAP3(LOW,  128000000, NOMINAL, 300000000,
+				  HIGH, 500000000),
 		CLK_INIT(gfx3d_clk.c),
 		.depends = &gmem_axi_clk.c,
 	},
@@ -4397,7 +4396,7 @@ static CLK_AIF_BIT_DIV(spare_i2s_spkr_bit, LCC_SPARE_I2S_SPKR_NS_REG,
 		.mnd_en_mask = BIT(8) * !!(n), \
 	}
 static struct clk_freq_tbl clk_tbl_pcm[] = {
-	F_PCM(       0, gnd,  1, 0,   0),
+	{ .ns_val = BIT(10) /* external input */ },
 	F_PCM(  512000, pll4, 4, 1, 192),
 	F_PCM(  768000, pll4, 4, 1, 128),
 	F_PCM( 1024000, pll4, 4, 1,  96),
@@ -4425,7 +4424,7 @@ static struct rcg_clk pcm_clk = {
 	.ns_reg = LCC_PCM_NS_REG,
 	.md_reg = LCC_PCM_MD_REG,
 	.root_en_mask = BIT(9),
-	.ns_mask = (BM(31, 16) | BM(6, 0)),
+	.ns_mask = BM(31, 16) | BIT(10) | BM(6, 0),
 	.set_rate = set_rate_mnd,
 	.freq_tbl = clk_tbl_pcm,
 	.current_freq = &rcg_dummy_freq,
@@ -4512,6 +4511,7 @@ static DEFINE_CLK_VOTER(dfab_sdc5_clk, &dfab_clk.c);
 static DEFINE_CLK_VOTER(dfab_sps_clk, &dfab_clk.c);
 static DEFINE_CLK_VOTER(dfab_bam_dmux_clk, &dfab_clk.c);
 static DEFINE_CLK_VOTER(dfab_scm_clk, &dfab_clk.c);
+static DEFINE_CLK_VOTER(dfab_tzcom_clk, &dfab_clk.c);
 
 static DEFINE_CLK_VOTER(ebi1_msmbus_clk, &ebi1_clk.c);
 /*
@@ -5143,6 +5143,7 @@ static struct clk_lookup msm_clocks_8064[] = {
 	CLK_DUMMY("bus_clk",		DFAB_SDC4_CLK,		NULL, 0),
 	CLK_DUMMY("dfab_clk",		DFAB_CLK,		NULL, 0),
 	CLK_DUMMY("bus_clk",		DFAB_SCM_CLK,	"scm", 0),
+	CLK_LOOKUP("bus_clk",       dfab_tzcom_clk.c,       "tzcom"),
 	CLK_LOOKUP("alt_core_clk",    usb_hsic_xcvr_fs_clk.c,  "msm_hsic_host"),
 	CLK_LOOKUP("phy_clk",	      usb_hsic_hsic_clk.c,     "msm_hsic_host"),
 	CLK_LOOKUP("cal_clk",	      usb_hsic_hsio_cal_clk.c, "msm_hsic_host"),
@@ -5431,6 +5432,7 @@ static struct clk_lookup msm_clocks_8960_v1[] __initdata = {
 	CLK_LOOKUP("dfab_clk",		dfab_sps_clk.c,	"msm_sps"),
 	CLK_LOOKUP("bus_clk",		dfab_bam_dmux_clk.c,	"BAM_RMNT"),
 	CLK_LOOKUP("bus_clk",		dfab_scm_clk.c, "scm"),
+	CLK_LOOKUP("bus_clk",       dfab_tzcom_clk.c,   "tzcom"),
 
 	CLK_LOOKUP("mem_clk",		ebi1_adm_clk.c, "msm_dmov"),
 

@@ -117,7 +117,7 @@ static ssize_t awb_calibration_show(struct device *dev,
 	 printk(KERN_INFO "awb_calibration_show():\n");
 	 pint = (int *)buf;
 	 for (i = 0; i < 906; i++)
-	   printk(KERN_INFO "ANDREW, %d-%x\n", i, pint[i]);
+	   printk(KERN_INFO "%d-%x\n", i, pint[i]);
 
    }
 #endif

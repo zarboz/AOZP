@@ -86,7 +86,6 @@ static enum power_supply_property htc_battery_properties[] = {
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_TECHNOLOGY,
 	POWER_SUPPLY_PROP_CAPACITY,
-	POWER_SUPPLY_PROP_OVERLOAD,
 };
 
 static enum power_supply_property htc_power_properties[] = {
@@ -210,13 +209,6 @@ static ssize_t htc_battery_show_batt_attr(struct device *dev,
 					char *buf)
 {
 	return battery_core_info.func.func_show_batt_attr(attr, buf);
-}
-
-static ssize_t htc_battery_show_cc_attr(struct device *dev,
-					struct device_attribute *attr,
-					char *buf)
-{
-	return battery_core_info.func.func_show_cc_attr(attr, buf);
 }
 
 static ssize_t htc_battery_set_delta(struct device *dev,
@@ -396,35 +388,6 @@ static ssize_t htc_battery_set_network_search(struct device *dev,
 
 	return count;
 }
-static ssize_t htc_battery_set_navigation(struct device *dev,
-				struct device_attribute *attr,
-				const char *buf, size_t count)
-{
-	unsigned long navigation = 0;
-	int rc = 0;
-
-	rc = strict_strtoul(buf, 10, &navigation);
-	if (rc)
-		return rc;
-
-	BATT_LOG("Set context navigation=%lu", navigation);
-
-	if (!battery_core_info.func.func_context_event_handler) {
-		BATT_ERR("No context_event_notify function!");
-		return -ENOENT;
-	}
-
-	if (navigation) {
-		battery_core_info.func.func_context_event_handler(
-									EVENT_NAVIGATION_START);
-	} else {
-		battery_core_info.func.func_context_event_handler(
-									EVENT_NAVIGATION_STOP);
-	}
-
-	return count;
-}
-
 static struct device_attribute htc_battery_attrs[] = {
 	HTC_BATTERY_ATTR(batt_id),
 	HTC_BATTERY_ATTR(batt_vol),
@@ -437,7 +400,6 @@ static struct device_attribute htc_battery_attrs[] = {
 	HTC_BATTERY_ATTR(batt_state),
 
 	__ATTR(batt_attr_text, S_IRUGO, htc_battery_show_batt_attr, NULL),
-	__ATTR(batt_power_meter, S_IRUGO, htc_battery_show_cc_attr, NULL),
 };
 
 static struct device_attribute htc_set_delta_attrs[] = {
@@ -454,8 +416,6 @@ static struct device_attribute htc_set_delta_attrs[] = {
 		htc_battery_set_phone_call),
 	__ATTR(network_search, S_IWUSR | S_IWGRP, NULL,
 		htc_battery_set_network_search),
-	__ATTR(navigation, S_IWUSR | S_IWGRP, NULL,
-		htc_battery_set_navigation),
 };
 
 static int htc_battery_create_attrs(struct device *dev)
@@ -481,7 +441,7 @@ htc_attrs_failed:
 		device_remove_file(dev, &htc_battery_attrs[i]);
 htc_delta_attrs_failed:
 	while (j--)
-		device_remove_file(dev, &htc_set_delta_attrs[i]);
+		device_remove_file(dev, &htc_set_delta_attrs[j]);
 succeed:
 	return rc;
 }
@@ -516,9 +476,6 @@ static int htc_battery_get_property(struct power_supply *psy,
 		mutex_lock(&battery_core_info.info_lock);
 		val->intval = battery_core_info.rep.level;
 		mutex_unlock(&battery_core_info.info_lock);
-		break;
-	case POWER_SUPPLY_PROP_OVERLOAD:
-		val->intval = battery_core_info.rep.overload;
 		break;
 	default:
 		return -EINVAL;
@@ -612,10 +569,6 @@ static ssize_t htc_battery_show_property(struct device *dev,
 		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
 				battery_core_info.rep.batt_state);
 		break;
-	case OVERLOAD:
-		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
-				battery_core_info.rep.overload);
-		break;
 	default:
 		i = -EINVAL;
 	}
@@ -696,7 +649,6 @@ int htc_battery_core_update_changed(void)
 	int is_send_usb_uevent = 0;
 	int is_send_ac_uevent = 0;
 	int is_send_wireless_charger_uevent = 0;
-	static int batt_temp_over_68c_count = 0;
 
 	if (battery_register) {
 		BATT_ERR("No battery driver exists.");
@@ -749,22 +701,6 @@ int htc_battery_core_update_changed(void)
 	}
 
 	memcpy(&battery_core_info.rep, &new_batt_info_rep, sizeof(struct battery_info_reply));
-
-	/*
-	 * To avoid one time error reading shutdown device.
-	 * Let userspace to see Tbatt > 68 C if it's > 68 C consuccessively 3 times
-	 */
-	if (battery_core_info.rep.batt_temp > 680) {
-		batt_temp_over_68c_count++;
-		if (batt_temp_over_68c_count < 3) {
-			pr_info("[BATT] batt_temp_over_68c_count=%d, (temp=%d)\n",
-					batt_temp_over_68c_count, battery_core_info.rep.batt_temp);
-			battery_core_info.rep.batt_temp = 680;
-		}
-	} else {
-		/* reset count */
-		batt_temp_over_68c_count = 0;
-	}
 
 	/* overwrite fake info if test by power monitor flag is set */
 	if (test_power_monitor) {
@@ -821,9 +757,8 @@ int htc_battery_core_update_changed(void)
 	battery_core_info.update_time = jiffies;
 	mutex_unlock(&battery_core_info.info_lock);
 
-	BATT_LOG("ID=%d, level=%d, vol=%d, temp=%d, current=%d, "
-		"chg_src=%d, chg_en=%d, full_bat=%d, over_vchg=%d, "
-		"batt_state=%d, overload=%d",
+	BATT_LOG("ID=%d, level=%d, vol=%d, temp=%d, batt_current=%d, "
+		"chg_src=%d, chg_en=%d, full_bat=%d, over_vchg=%d, batt_state=%d",
 			battery_core_info.rep.batt_id,
 			battery_core_info.rep.level,
 			battery_core_info.rep.batt_vol,
@@ -833,8 +768,7 @@ int htc_battery_core_update_changed(void)
 			battery_core_info.rep.charging_enabled,
 			battery_core_info.rep.full_bat,
 			battery_core_info.rep.over_vchg,
-			battery_core_info.rep.batt_state,
-			battery_core_info.rep.overload);
+			battery_core_info.rep.batt_state);
 
 	/* send uevent if need */
 	if (is_send_batt_uevent) {
@@ -877,9 +811,6 @@ int htc_battery_core_register(struct device *dev,
 	if (htc_battery->func_show_batt_attr)
 		battery_core_info.func.func_show_batt_attr =
 					htc_battery->func_show_batt_attr;
-	if (htc_battery->func_show_cc_attr)
-		battery_core_info.func.func_show_cc_attr =
-					htc_battery->func_show_cc_attr;
 	if (htc_battery->func_get_battery_info)
 		battery_core_info.func.func_get_battery_info =
 					htc_battery->func_get_battery_info;
@@ -930,7 +861,6 @@ int htc_battery_core_register(struct device *dev,
 	battery_core_info.rep.temp_fault = -1;
 	/* zero means battey info is not ready */
 	battery_core_info.rep.batt_state = 0;
-	battery_core_info.rep.overload = 0;
 
 	battery_over_loading = 0;
 

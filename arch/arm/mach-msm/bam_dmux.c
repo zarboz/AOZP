@@ -79,6 +79,9 @@ static uint32_t bam_dmux_write_cpy_cnt;
 static uint32_t bam_dmux_write_cpy_bytes;
 static uint32_t bam_dmux_tx_sps_failure_cnt;
 static uint32_t bam_dmux_tx_stall_cnt;
+static atomic_t bam_dmux_ack_out_cnt = ATOMIC_INIT(0);
+static atomic_t bam_dmux_ack_in_cnt = ATOMIC_INIT(0);
+static atomic_t bam_dmux_a2_pwr_cntl_in_cnt = ATOMIC_INIT(0);
 
 #define DBG(x...) do {		                 \
 		if (msm_bam_dmux_debug_enable || ril_debug_flag)  \
@@ -116,6 +119,14 @@ static uint32_t bam_dmux_tx_stall_cnt;
 	bam_dmux_tx_stall_cnt++; \
 } while (0)
 
+#define DBG_INC_ACK_OUT_CNT() \
+	atomic_inc(&bam_dmux_ack_out_cnt)
+
+#define DBG_INC_A2_POWER_CONTROL_IN_CNT() \
+	atomic_inc(&bam_dmux_a2_pwr_cntl_in_cnt)
+
+#define DBG_INC_ACK_IN_CNT() \
+	atomic_inc(&bam_dmux_ack_in_cnt)
 #else
 #define DBG(x...) do { } while (0)
 #define DBG_INC_READ_CNT(x...) do { } while (0)
@@ -123,6 +134,10 @@ static uint32_t bam_dmux_tx_stall_cnt;
 #define DBG_INC_WRITE_CPY(x...) do { } while (0)
 #define DBG_INC_TX_SPS_FAILURE_CNT() do { } while (0)
 #define DBG_INC_TX_STALL_CNT() do { } while (0)
+#define DBG_INC_ACK_OUT_CNT() do { } while (0)
+#define DBG_INC_A2_POWER_CONTROL_IN_CNT() \
+	do { } while (0)
+#define DBG_INC_ACK_IN_CNT() do { } while (0)
 #endif
 
 struct bam_ch_info {
@@ -222,7 +237,7 @@ static struct completion bam_connection_completion;
 static struct delayed_work ul_timeout_work;
 static int ul_packet_written;
 static atomic_t ul_ondemand_vote = ATOMIC_INIT(0);
-static struct clk *dfab_clk , *xo_clk;
+static struct clk *dfab_clk, *xo_clk;
 static DEFINE_RWLOCK(ul_wakeup_lock);
 static DECLARE_WORK(kickoff_ul_wakeup, kickoff_ul_wakeup_func);
 static int bam_connection_is_active;
@@ -494,15 +509,6 @@ static inline void handle_bam_mux_cmd_open(struct bam_mux_hdr *rx_hdr)
 	int ret;
 
 	spin_lock_irqsave(&bam_ch[rx_hdr->ch_id].lock, flags);
-	/* + SSD_RIL */
-	if(bam_ch_is_remote_open(rx_hdr->ch_id)) {
-		pr_err(MODULE_NAME "%s: channel %d already be opened\n",
-				__func__, rx_hdr->ch_id);
-		spin_unlock_irqrestore(&bam_ch[rx_hdr->ch_id].lock, flags);
-		queue_rx();
-		return;
-	}
-	/* - SSD_RIL */
 	bam_ch[rx_hdr->ch_id].status |= BAM_CH_REMOTE_OPEN;
 	bam_ch[rx_hdr->ch_id].num_tx_pkts = 0;
 	spin_unlock_irqrestore(&bam_ch[rx_hdr->ch_id].lock, flags);
@@ -570,8 +576,7 @@ static void handle_bam_mux_cmd(struct work_struct *work)
 
 		if (!a2_pc_disabled) {
 			a2_pc_disabled = 1;
-			schedule_delayed_work(&ul_timeout_work,
-				msecs_to_jiffies(UL_TIMEOUT_DELAY));
+			ul_wakeup();
 		}
 
 		handle_bam_mux_cmd_open(rx_hdr);
@@ -705,7 +710,7 @@ static void bam_mux_write_done(struct work_struct *work)
 	skb = info->skb;
 	kfree(info);
 	hdr = (struct bam_mux_hdr *)skb->data;
-	DBG_INC_WRITE_CNT(skb->data_len);
+	DBG_INC_WRITE_CNT(skb->len);
 	event_data = (unsigned long)(skb);
 	spin_lock_irqsave(&bam_ch[hdr->ch_id].lock, flags);
 	bam_ch[hdr->ch_id].num_tx_pkts--;
@@ -1236,16 +1241,26 @@ static int debug_stats(char *buf, int max)
 	int i = 0;
 
 	i += scnprintf(buf + i, max - i,
+			"skb read cnt:    %u\n"
+			"skb write cnt:   %u\n"
 			"skb copy cnt:    %u\n"
 			"skb copy bytes:  %u\n"
 			"sps tx failures: %u\n"
 			"sps tx stalls:   %u\n"
-			"rx queue len:    %d\n",
+			"rx queue len:    %d\n"
+			"a2 ack out cnt:  %d\n"
+			"a2 ack in cnt:   %d\n"
+			"a2 pwr cntl in:  %d\n",
+			bam_dmux_read_cnt,
+			bam_dmux_write_cnt,
 			bam_dmux_write_cpy_cnt,
 			bam_dmux_write_cpy_bytes,
 			bam_dmux_tx_sps_failure_cnt,
 			bam_dmux_tx_stall_cnt,
-			bam_rx_pool_len
+			bam_rx_pool_len,
+			atomic_read(&bam_dmux_ack_out_cnt),
+			atomic_read(&bam_dmux_ack_in_cnt),
+			atomic_read(&bam_dmux_a2_pwr_cntl_in_cnt)
 			);
 
 	return i;
@@ -1553,8 +1568,8 @@ static void ul_timeout(struct work_struct *work)
 			ul_powerdown();
 		}
 	} else {
-		if(board_mfg_mode() == 4) { /* power test mode */
-			pr_info(MODULE_NAME "%s: power test mode. power down directly\n", __func__);
+		if(board_mfg_mode() == 4 || board_mfg_mode() == 8) { /* power test mode or mfg kernel mode */
+			pr_info(MODULE_NAME "%s: power test mode or mfg kernel mode. power down directly\n", __func__);
 			ul_powerdown();
 		}
 	}
@@ -1753,10 +1768,10 @@ static void vote_dfab(void)
 	rc = clk_prepare_enable(dfab_clk);
 	if (rc)
 		DMUX_LOG_KERR("bam_dmux vote for dfab failed rc = %d\n", rc);
-	dfab_is_on = 1;
 	rc = clk_prepare_enable(xo_clk);
 	if (rc)
-	       DMUX_LOG_KERR("bam_dmux vote for xo failed rc = %d\n", rc);
+		DMUX_LOG_KERR("bam_dmux vote for xo failed rc = %d\n", rc);
+	dfab_is_on = 1;
 	mutex_unlock(&dfab_status_lock);
 }
 
@@ -1771,7 +1786,7 @@ static void unvote_dfab(void)
 		mutex_unlock(&dfab_status_lock);
 		return;
 	}
-	clk_disable(dfab_clk);
+	clk_disable_unprepare(dfab_clk);
 	clk_disable_unprepare(xo_clk);
 	dfab_is_on = 0;
 	mutex_unlock(&dfab_status_lock);
@@ -2121,11 +2136,13 @@ static void toggle_apps_ack(void)
 				clear_bit & SMSM_A2_POWER_CONTROL_ACK,
 				~clear_bit & SMSM_A2_POWER_CONTROL_ACK);
 	clear_bit = ~clear_bit;
+	DBG_INC_ACK_OUT_CNT();
 }
 
 static void bam_dmux_smsm_cb(void *priv, uint32_t old_state, uint32_t new_state)
 {
 	bam_dmux_power_state = new_state & SMSM_A2_POWER_CONTROL ? 1 : 0;
+	DBG_INC_A2_POWER_CONTROL_IN_CNT();
 	bam_dmux_log("%s: 0x%08x -> 0x%08x\n", __func__, old_state,
 			new_state);
 	pr_info(MODULE_NAME "%s: 0x%08x -> 0x%08x\n", __func__, old_state,
@@ -2168,6 +2185,7 @@ static void bam_dmux_smsm_cb(void *priv, uint32_t old_state, uint32_t new_state)
 static void bam_dmux_smsm_ack_cb(void *priv, uint32_t old_state,
 						uint32_t new_state)
 {
+	DBG_INC_ACK_IN_CNT();
 	bam_dmux_log("%s: 0x%08x -> 0x%08x\n", __func__, old_state,
 			new_state);
 	pr_info(MODULE_NAME "%s: 0x%08x -> 0x%08x\n", __func__, old_state,
@@ -2182,12 +2200,12 @@ static int bam_dmux_probe(struct platform_device *pdev)
 	DBG("%s probe called\n", __func__);
 	if (bam_mux_initialized)
 		return 0;
+
 	xo_clk = clk_get(&pdev->dev, "xo");
 	if (IS_ERR(xo_clk)) {
-	pr_err("%s: did not get xo clock\n", __func__);
-	return PTR_ERR(xo_clk);
+		pr_err("%s: did not get xo clock\n", __func__);
+		return PTR_ERR(xo_clk);
 	}
-
 	dfab_clk = clk_get(&pdev->dev, "bus_clk");
 	if (IS_ERR(dfab_clk)) {
 		pr_err(MODULE_NAME "%s: did not get dfab clock\n", __func__);

@@ -974,7 +974,7 @@ static long htcdrm_ioctl(struct file *file, unsigned int command, unsigned long 
 			}
 			ret = secure_key_ladder(ITEM_SET_ENTITLEMENT_KEY,hmsg.req_len,emmkey);
 			if (ret)
-				PERR("set emmkey failed (%d)\n", ret);
+				PERR("Set Eetitlement failed (%d)\n", ret);
 			break;
 		case HTC_OEMCRYPTO_DERIVE_CONTROL_WORD:
 			if (copy_from_user(ecmkey, (void __user *)hmsg.req_buf, hmsg.req_len)) {
@@ -983,7 +983,7 @@ static long htcdrm_ioctl(struct file *file, unsigned int command, unsigned long 
 			}
 			ret = secure_key_ladder(ITEM_DERIVE_CONTROL_WORD,hmsg.req_len,ecmkey);
 			if (ret)
-				PERR("DeriveControlWord failed (%d)\n", ret);
+				PERR("Derive Control Word failed (%d)\n", ret);
 			else {
 				if (copy_to_user( (void __user *)hmsg.resp_buf , ecmkey , hmsg.resp_len)) {
 					PERR("copy_to_user error (ecmkey)");

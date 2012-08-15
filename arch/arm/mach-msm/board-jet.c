@@ -310,11 +310,11 @@ void jet_lcd_id_power(int pull)
 
 #endif
 
-#define MSM_PMEM_ADSP_SIZE         0x6D00000
+#define MSM_PMEM_ADSP_SIZE         0x6000000 /* 96 Mbytes */
 #define MSM_PMEM_ADSP2_SIZE        0x730000
 #define MSM_PMEM_AUDIO_SIZE        0x2B4000
-#define MSM_PMEM_SIZE 0x4000000 /* 64 Mbytes */
-#define MSM_LIQUID_PMEM_SIZE 0x4000000 /* 64 Mbytes */
+#define MSM_PMEM_SIZE 0x2000000 /* 32 Mbytes */
+#define MSM_LIQUID_PMEM_SIZE 0x1000000 /* 16 Mbytes */
 
 #ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
 #define MSM_PMEM_KERNEL_EBI1_SIZE  0x280000
@@ -1559,7 +1559,7 @@ static struct camera_flash_info msm_camera_sensor_s5k3h2yx_flash_info = {
 
 static struct camera_flash_cfg msm_camera_sensor_s5k3h2yx_flash_cfg = {
 	.low_temp_limit		= 5,
-	.low_cap_limit		= 15,
+	.low_cap_limit		= 5,
 	.flash_info             = &msm_camera_sensor_s5k3h2yx_flash_info,
 };
 /* Andrew_Cheng linear led 20111205 ME */

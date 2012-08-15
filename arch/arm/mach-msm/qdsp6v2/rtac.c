@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -442,7 +442,9 @@ u32 send_adm_apr(void *buf, u32 opcode)
 	}
 
 
-	if (payload_size > MAX_PAYLOAD_SIZE) {
+	if ((payload_size < 0) ||
+		(payload_size > MAX_PAYLOAD_SIZE)) {
+
 			pr_err("%s: Invalid payload size = %d\n",
 				__func__, payload_size);
 		goto done;
@@ -612,7 +614,9 @@ u32 send_rtac_asm_apr(void *buf, u32 opcode)
 		goto done;
 	}
 
-	if (payload_size > MAX_PAYLOAD_SIZE) {
+	if ((payload_size < 0) ||
+		(payload_size > MAX_PAYLOAD_SIZE)) {
+
 			pr_err("%s: Invalid payload size = %d\n",
 				__func__, payload_size);
 		goto done;
@@ -623,7 +627,7 @@ u32 send_rtac_asm_apr(void *buf, u32 opcode)
 			__func__);
 		goto done;
 	}
-	if (session_id > SESSION_MAX) {
+	if (session_id >= AFE_MAX_PORTS) {
 		pr_err("%s: Invalid Session = %d\n", __func__, session_id);
 		goto done;
 	}
@@ -719,7 +723,7 @@ void rtac_set_voice_handle(u32 mode, void *handle)
 bool rtac_make_voice_callback(u32 mode, uint32_t *payload, u32 payload_size)
 {
 	if ((atomic_read(&rtac_voice_apr_data[mode].cmd_state) != 1) ||
-			(mode >= RTAC_VOICE_MODES))
+			(mode < 0) || (mode >= RTAC_VOICE_MODES))
 		return false;
 
 	pr_debug("%s\n", __func__);
@@ -778,7 +782,9 @@ u32 send_voice_apr(u32 mode, void *buf, u32 opcode)
 		goto done;
 	}
 
-	if (payload_size > MAX_PAYLOAD_SIZE) {
+	if ((payload_size < 0) ||
+		(payload_size > MAX_PAYLOAD_SIZE)) {
+
 			pr_err("%s: Invalid payload size = %d\n",
 				__func__, payload_size);
 		goto done;

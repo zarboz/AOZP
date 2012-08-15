@@ -235,6 +235,9 @@ static int __cpuinit msm_cpufreq_init(struct cpufreq_policy *policy)
 	init_completion(&cpu_work->complete);
 #endif
 
+//	policy->min = 384000;
+//	policy->max = 1512000;
+
 	return 0;
 }
 
@@ -296,7 +299,8 @@ static ssize_t store_mfreq(struct sysdev_class *class,
 
 static SYSDEV_CLASS_ATTR(mfreq, 0200, NULL, store_mfreq);
 
-static struct freq_attr *msm_freq_attr[] = {
+static struct freq_attr *msm_cpufreq_attr[] = {	
+
 	&cpufreq_freq_attr_scaling_available_freqs,
 	NULL,
 };
@@ -308,7 +312,7 @@ static struct cpufreq_driver msm_cpufreq_driver = {
 	.verify		= msm_cpufreq_verify,
 	.target		= msm_cpufreq_target,
 	.name		= "msm",
-	.attr		= msm_freq_attr,
+	.attr       = msm_cpufreq_attr,
 };
 
 static struct notifier_block msm_cpufreq_pm_notifier = {

@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2010-2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -60,6 +60,7 @@
 #include "qdss.h"
 #include "pm-boot.h"
 #include <mach/msm_xo.h>
+#include <linux/wakelock.h>
 
 #ifdef pr_err
 #undef pr_err
@@ -98,6 +99,7 @@ enum {
 	MSM_PM_DEBUG_SUSPEND_LIMITS = BIT(2),
 	MSM_PM_DEBUG_CLOCK = BIT(3),
 	MSM_PM_DEBUG_RESET_VECTOR = BIT(4),
+	MSM_PM_DEBUG_IDLE_CLK = BIT(5),
 	MSM_PM_DEBUG_IDLE = BIT(6),
 	MSM_PM_DEBUG_IDLE_LIMITS = BIT(7),
 	MSM_PM_DEBUG_HOTPLUG = BIT(8),
@@ -123,6 +125,7 @@ extern void gpio_set_diag_gpio_table(unsigned long *dwMFG_gpio_table);
 
 static struct msm_pm_platform_data *msm_pm_modes;
 static int rpm_cpu0_wakeup_irq;
+static struct wake_lock idlelock;
 
 /*
 PHY define in msm_iomap-8960.h, VIRT define in msm_iomap.h
@@ -1153,6 +1156,9 @@ int msm_pm_idle_enter(enum msm_pm_sleep_mode sleep_mode)
 		if (sleep_delay == 0) /* 0 would mean infinite time */
 			sleep_delay = 1;
 
+		if (MSM_PM_DEBUG_IDLE_CLK & msm_pm_debug_mask)
+			clock_debug_print_enabled();
+
 		ret = msm_rpmrs_enter_sleep(
 			sleep_delay, msm_pm_idle_rs_limits, true, notify_rpm);
 		if (!ret) {
@@ -1280,7 +1286,6 @@ int msm_pm_wait_cpu_shutdown(unsigned int cpu)
                         __func__, cpu);
         return -EBUSY;
 }
-
 
 static int msm_pm_enter(suspend_state_t state)
 {
@@ -1644,6 +1649,12 @@ static int __init msm_pm_init(void)
 	store_pm_boot_vector_addr(addr);
 
 	keep_dig_voltage_low_in_idle(true);
+
+	if(board_mfg_mode() == 6 || board_mfg_mode() == 8) {
+		wake_lock_init(&idlelock, WAKE_LOCK_IDLE, "mfg_idle_wakelock");
+		wake_lock(&idlelock);
+		pr_info("MFG idle wakelock\n");
+	}
 
 	return 0;
 }

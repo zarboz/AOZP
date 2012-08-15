@@ -903,10 +903,6 @@ int hs_notify_key_event(int key_code)
 	else if (!hs_hpin_stable()) {
 		HS_LOG("IGNORE key %d (Unstable HPIN)", key_code);
 		return 1;
-	} else if (hi->hs_35mm_type == HEADSET_UNPLUG && hi->is_ext_insert == 1) {
-		HS_LOG("MIC status is changed from float, re-polling to decide accessory type");
-		update_mic_status(HS_DEF_MIC_DETECT_COUNT);
-		return 1;
 	} else {
 		work = kzalloc(sizeof(struct button_work), GFP_KERNEL);
 		if (!work) {
